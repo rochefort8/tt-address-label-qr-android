@@ -11,16 +11,19 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -28,8 +31,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -63,8 +69,8 @@ private data class DetectedQrRow(
 )
 
 private enum class ScanTab(val title: String) {
-    Scan("Scan"),
-    List("List"),
+    Scan("読み取り"),
+    List("一覧"),
 }
 
 class MainActivity : ComponentActivity() {
@@ -279,47 +285,71 @@ private fun ScanListTabBar(
     selectedTabIndex: Int,
     onTabSelected: (Int) -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .background(Color(0xFFB3151C))
-            .border(1.dp, Color.White),
+    TabRow(
+        selectedTabIndex = selectedTabIndex,
+        containerColor = Color(0xFFB3151C),
+        contentColor = Color.White,
+        divider = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.45f)),
+            )
+        },
+        indicator = { positions ->
+            androidx.compose.material3.TabRowDefaults.Indicator(
+                modifier = Modifier.tabIndicatorOffset(positions[selectedTabIndex]),
+                height = 3.dp,
+                color = Color.White,
+            )
+        },
     ) {
         ScanTab.entries.forEachIndexed { index, tab ->
             val selected = selectedTabIndex == index
-            Box(
+            Tab(
+                selected = selected,
+                onClick = { onTabSelected(index) },
+                selectedContentColor = Color.White,
+                unselectedContentColor = Color.White.copy(alpha = 0.65f),
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxSize()
-                    .background(
-                        if (selected) {
-                            Color(0xFF5B0D12)
-                        } else {
-                            Color(0xFFB3151C)
-                        },
-                    )
-                    .border(
-                        width = if (selected) 2.dp else 1.dp,
-                        color = if (selected) Color.White else Color.White.copy(alpha = 0.5f),
-                    )
-                    .clickable { onTabSelected(index) },
-                contentAlignment = Alignment.Center,
+                    .height(48.dp)
+                    .background(Color(0xFFB3151C)),
             ) {
-                Text(
-                    text = tab.title,
-                    color = if (selected) Color.White else Color.White.copy(alpha = 0.65f),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                )
-                if (selected) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth(0.8f)
-                            .height(3.dp)
-                            .background(Color.White),
-                    )
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            painter = painterResource(
+                                id = if (tab == ScanTab.Scan) {
+                                    android.R.drawable.ic_menu_camera
+                                } else {
+                                    android.R.drawable.ic_menu_agenda
+                                },
+                            ),
+                            contentDescription = tab.title,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = tab.title,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                        )
+                    }
+                    if (index < ScanTab.entries.lastIndex) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .width(1.dp)
+                                .fillMaxHeight(0.65f)
+                                .background(Color.White.copy(alpha = 0.55f)),
+                        )
+                    }
                 }
             }
         }
