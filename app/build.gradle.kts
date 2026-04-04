@@ -12,6 +12,8 @@ val localProperties = Properties().apply {
     }
 }
 val qrDecryptKeyHex = (localProperties.getProperty("qr.decrypt.key.hex") ?: "").trim()
+val newsletterApiKey = (localProperties.getProperty("newsletter.api.key") ?: "").trim()
+val newsletterApiEndpoint = (localProperties.getProperty("newsletter.api.endpoint") ?: "").trim()
 
 android {
     namespace = "com.ttqr.android"
@@ -24,6 +26,8 @@ android {
         versionCode = 1
         versionName = "1.0"
         buildConfigField("String", "QR_DECRYPT_KEY_HEX", "\"$qrDecryptKeyHex\"")
+        buildConfigField("String", "NEWSLETTER_API_KEY", "\"$newsletterApiKey\"")
+        buildConfigField("String", "NEWSLETTER_API_ENDPOINT", "\"$newsletterApiEndpoint\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

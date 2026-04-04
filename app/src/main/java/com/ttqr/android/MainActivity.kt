@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.graphics.Rect as AndroidRect
 import android.os.Bundle
 import android.util.Base64
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -41,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,6 +60,14 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.ttqr.android.ui.QrScannerPreview
 import com.ttqr.android.ui.theme.AppTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -99,6 +109,8 @@ private fun QrScannerApp() {
     var detectedRows by remember { mutableStateOf<List<DetectedQrRow>>(emptyList()) }
     var highlightedRaw by remember { mutableStateOf<String?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var isSending by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -237,8 +249,31 @@ private fun QrScannerApp() {
                                 )
 
                                 ScanActionBar(
-                                    enabled = detectedRows.isNotEmpty(),
-                                    onSendClick = {},
+                                    enabled = detectedRows.isNotEmpty() && !isSending,
+                                    onSendClick = {
+                                        coroutineScope.launch {
+                                            val userIds = detectedRows.map { it.id }.distinct()
+                                            isSending = true
+                                            val result = runCatching {
+                                                registerNewsletterUnreachable(userIds)
+                                            }
+                                            isSending = false
+
+                                            result.onSuccess {
+                                                Toast.makeText(
+                                                    context,
+                                                    "IDを送信しました (${userIds.size}件)",
+                                                    Toast.LENGTH_SHORT,
+                                                ).show()
+                                            }.onFailure { error ->
+                                                Toast.makeText(
+                                                    context,
+                                                    "送信失敗: ${error.message ?: "unknown error"}",
+                                                    Toast.LENGTH_LONG,
+                                                ).show()
+                                            }
+                                        }
+                                    },
                                     onDeleteClick = { showDeleteDialog = true },
                                 )
                             }
@@ -544,5 +579,49 @@ private fun decryptEncryptedQrPayload(raw: String): String? {
         String(decrypted, Charsets.UTF_8)
     } catch (_: Exception) {
         null
+    }
+}
+
+private suspend fun registerNewsletterUnreachable(userIds: List<String>) {
+    if (userIds.isEmpty()) {
+        return
+    }
+
+    val apiKey = BuildConfig.NEWSLETTER_API_KEY.trim()
+    if (apiKey.isEmpty()) {
+        throw IOException("newsletter.api.key is missing in local.properties")
+    }
+
+    withContext(Dispatchers.IO) {
+        val endpoint = BuildConfig.NEWSLETTER_API_ENDPOINT.trim()
+        if (endpoint.isEmpty()) {
+            throw IOException("newsletter.api.endpoint is missing in local.properties")
+        }
+
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection)
+        try {
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 15_000
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("X-API-Key", apiKey)
+
+            val payload = JSONObject().put("user_ids", JSONArray(userIds))
+            connection.outputStream.use { output ->
+                output.write(payload.toString().toByteArray(Charsets.UTF_8))
+            }
+
+            val responseCode = connection.responseCode
+            if (responseCode !in 200..299) {
+                val errorBody = connection.errorStream
+                    ?.bufferedReader()
+                    ?.use { it.readText() }
+                    .orEmpty()
+                throw IOException("HTTP $responseCode ${errorBody.take(200)}".trim())
+            }
+        } finally {
+            connection.disconnect()
+        }
     }
 }
