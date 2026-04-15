@@ -27,6 +27,10 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -37,8 +41,8 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -107,10 +111,43 @@ private fun QrScannerApp() {
     var detectedQrBounds by remember { mutableStateOf<AndroidRect?>(null) }
     var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
     var detectedRows by remember { mutableStateOf<List<DetectedQrRow>>(emptyList()) }
+    var listRows by remember { mutableStateOf<List<DetectedQrRow>>(emptyList()) }
     var highlightedRaw by remember { mutableStateOf<String?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var isSending by remember { mutableStateOf(false) }
+    var isRefreshingListIds by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+
+    fun refreshListIds() {
+        if (isRefreshingListIds) {
+            return
+        }
+        coroutineScope.launch {
+            isRefreshingListIds = true
+            val result = runCatching { fetchNewsletterUnreachableUserIds() }
+            isRefreshingListIds = false
+            result.onSuccess { ids ->
+                listRows = ids.map { id ->
+                    DetectedQrRow(
+                        id = id,
+                        name = "",
+                        raw = "list:$id",
+                    )
+                }
+                Toast.makeText(
+                    context,
+                    "IDを取得しました (${ids.size}件)",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }.onFailure { error ->
+                Toast.makeText(
+                    context,
+                    "ID取得失敗: ${error.message ?: "unknown error"}",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -121,6 +158,12 @@ private fun QrScannerApp() {
     LaunchedEffect(Unit) {
         if (!hasCameraPermission) {
             permissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    LaunchedEffect(selectedTabIndex) {
+        if (ScanTab.entries[selectedTabIndex] == ScanTab.List) {
+            refreshListIds()
         }
     }
 
@@ -280,7 +323,12 @@ private fun QrScannerApp() {
                         }
 
                         ScanTab.List -> {
-                            DummyListTable(modifier = Modifier.fillMaxSize())
+                            DetectedListTable(
+                                rows = listRows,
+                                refreshing = isRefreshingListIds,
+                                onRefresh = { refreshListIds() },
+                                modifier = Modifier.fillMaxSize(),
+                            )
                         }
                     }
                 }
@@ -439,100 +487,139 @@ private fun ScanActionBar(
 }
 
 @Composable
-private fun DummyListTable(
-    modifier: Modifier = Modifier,
-) {
-    val dummyRows = remember {
-        List(20) { index ->
-            DetectedQrRow(
-                id = (90000 + index).toString(),
-                name = "ダミー名前 ${index + 1}",
-                raw = "dummy-$index",
-            )
-        }
-    }
-    DetectedListTable(
-        rows = dummyRows,
-        modifier = modifier,
-    )
-}
-
-@Composable
 private fun DetectedListTable(
     rows: List<DetectedQrRow>,
     highlightedRaw: String? = null,
+    refreshing: Boolean = false,
+    onRefresh: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .background(Color.Black),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color(0xFF1A1A1A))
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+    val refresh = onRefresh
+    if (refresh == null) {
+        Column(
+            modifier = modifier
+                .background(Color.Black),
         ) {
-            Text(
-                text = "ID",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = "姓名",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                modifier = Modifier.weight(2f),
+            DetectedListTableContent(
+                rows = rows,
+                highlightedRaw = highlightedRaw,
             )
         }
+    } else {
+        PullRefreshDetectedListTable(
+            rows = rows,
+            highlightedRaw = highlightedRaw,
+            refreshing = refreshing,
+            onRefresh = refresh,
+            modifier = modifier,
+        )
+    }
+}
 
-        if (rows.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "項目がありません",
-                    color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 18.sp,
-                    textAlign = TextAlign.Center,
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(vertical = 4.dp),
-            ) {
-                items(rows) { row ->
-                    val isHighlighted = highlightedRaw == row.raw
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                if (isHighlighted) Color(0xFFB3151C) else Color.Transparent,
-                            )
-                            .padding(horizontal = 16.dp, vertical = 16.dp),
-                    ) {
-                        Text(
-                            text = row.id,
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            modifier = Modifier.weight(1f),
+@Composable
+private fun DetectedListTableContent(
+    rows: List<DetectedQrRow>,
+    highlightedRaw: String?,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF1A1A1A))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Text(
+            text = "ID",
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = "姓名",
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontSize = 18.sp,
+            modifier = Modifier.weight(2f),
+        )
+    }
+
+    if (rows.isEmpty()) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "項目がありません",
+                color = Color.White.copy(alpha = 0.85f),
+                fontSize = 18.sp,
+                textAlign = TextAlign.Center,
+            )
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(vertical = 4.dp),
+        ) {
+            items(rows) { row ->
+                val isHighlighted = highlightedRaw == row.raw
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (isHighlighted) Color(0xFFB3151C) else Color.Transparent,
                         )
-                        Text(
-                            text = row.name,
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            modifier = Modifier.weight(2f),
-                        )
-                    }
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                ) {
+                    Text(
+                        text = row.id,
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = row.name,
+                        color = Color.White,
+                        fontSize = 20.sp,
+                        modifier = Modifier.weight(2f),
+                    )
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterialApi::class)
+@Composable
+private fun PullRefreshDetectedListTable(
+    rows: List<DetectedQrRow>,
+    highlightedRaw: String?,
+    refreshing: Boolean,
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = refreshing,
+        onRefresh = onRefresh,
+    )
+    Box(
+        modifier = modifier
+            .background(Color.Black)
+            .pullRefresh(pullRefreshState),
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            DetectedListTableContent(
+                rows = rows,
+                highlightedRaw = highlightedRaw,
+            )
+        }
+        PullRefreshIndicator(
+            refreshing = refreshing,
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter),
+            backgroundColor = Color.Black,
+            contentColor = Color.White,
+        )
     }
 }
 
@@ -593,10 +680,11 @@ private suspend fun registerNewsletterUnreachable(userIds: List<String>) {
     }
 
     withContext(Dispatchers.IO) {
-        val endpoint = BuildConfig.NEWSLETTER_API_ENDPOINT.trim()
-        if (endpoint.isEmpty()) {
+        val baseEndpoint = BuildConfig.NEWSLETTER_API_ENDPOINT.trim()
+        if (baseEndpoint.isEmpty()) {
             throw IOException("newsletter.api.endpoint is missing in local.properties")
         }
+        val endpoint = "${baseEndpoint.trimEnd('/')}/register"
 
         val connection = (URL(endpoint).openConnection() as HttpURLConnection)
         try {
@@ -624,4 +712,67 @@ private suspend fun registerNewsletterUnreachable(userIds: List<String>) {
             connection.disconnect()
         }
     }
+}
+
+private suspend fun fetchNewsletterUnreachableUserIds(): List<String> {
+    val apiKey = BuildConfig.NEWSLETTER_API_KEY.trim()
+    if (apiKey.isEmpty()) {
+        throw IOException("newsletter.api.key is missing in local.properties")
+    }
+    val baseEndpoint = BuildConfig.NEWSLETTER_API_ENDPOINT.trim()
+    if (baseEndpoint.isEmpty()) {
+        throw IOException("newsletter.api.endpoint is missing in local.properties")
+    }
+    val endpoint = "${baseEndpoint.trimEnd('/')}/user_ids"
+
+    return withContext(Dispatchers.IO) {
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection)
+        try {
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 15_000
+            connection.setRequestProperty("X-API-Key", apiKey)
+
+            val responseCode = connection.responseCode
+            if (responseCode !in 200..299) {
+                val errorBody = connection.errorStream
+                    ?.bufferedReader()
+                    ?.use { it.readText() }
+                    .orEmpty()
+                throw IOException("HTTP $responseCode ${errorBody.take(200)}".trim())
+            }
+
+            val body = connection.inputStream.bufferedReader().use { it.readText() }.trim()
+            parseUserIdsResponse(body)
+        } finally {
+            connection.disconnect()
+        }
+    }
+}
+
+private fun parseUserIdsResponse(body: String): List<String> {
+    if (body.isEmpty()) {
+        return emptyList()
+    }
+    if (body.startsWith("[")) {
+        return jsonArrayToIds(JSONArray(body))
+    }
+
+    val json = JSONObject(body)
+    val arr = json.optJSONArray("user_ids")
+        ?: json.optJSONArray("ids")
+        ?: json.optJSONObject("data")?.optJSONArray("user_ids")
+        ?: json.optJSONObject("data")?.optJSONArray("ids")
+    return arr?.let { jsonArrayToIds(it) } ?: emptyList()
+}
+
+private fun jsonArrayToIds(arr: JSONArray): List<String> {
+    val ids = mutableListOf<String>()
+    for (index in 0 until arr.length()) {
+        val id = arr.optString(index).trim()
+        if (id.isNotEmpty()) {
+            ids += id
+        }
+    }
+    return ids
 }
