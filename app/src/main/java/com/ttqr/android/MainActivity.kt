@@ -80,6 +80,7 @@ private data class DetectedQrRow(
     val id: String,
     val name: String,
     val raw: String,
+    val encodedId: String,
 )
 
 private enum class ScanTab(val title: String) {
@@ -132,6 +133,7 @@ private fun QrScannerApp() {
                         id = id,
                         name = "",
                         raw = "list:$id",
+                        encodedId = "",
                     )
                 }
                 Toast.makeText(
@@ -205,7 +207,7 @@ private fun QrScannerApp() {
                                                 detectedQrBounds = bounds
                                                 val decrypted = decryptEncryptedQrPayload(value)
                                                 scannedText = decrypted
-                                                val row = decrypted?.toDetectedRow()
+                                                val row = decrypted?.toDetectedRow(encodedId = value)
                                                 if (row != null) {
                                                     highlightedRaw = row.raw
                                                     if (detectedRows.none { it.raw == row.raw }) {
@@ -296,9 +298,11 @@ private fun QrScannerApp() {
                                     onSendClick = {
                                         coroutineScope.launch {
                                             val userIds = detectedRows.map { it.id }.distinct()
+                                            val encodedUserIds = detectedRows.map { it.encodedId }.filter { it.isNotBlank() }.distinct()
                                             isSending = true
                                             val result = runCatching {
                                                 registerNewsletterUnreachable(userIds)
+                                                postEncodedUserIdsToSpreadsheet(encodedUserIds)
                                             }
                                             isSending = false
 
@@ -623,7 +627,7 @@ private fun PullRefreshDetectedListTable(
     }
 }
 
-private fun String.toDetectedRow(): DetectedQrRow? {
+private fun String.toDetectedRow(encodedId: String): DetectedQrRow? {
     val parts = split(",", limit = 2)
     if (parts.size != 2) {
         return null
@@ -637,6 +641,7 @@ private fun String.toDetectedRow(): DetectedQrRow? {
         id = id,
         name = name,
         raw = this,
+        encodedId = encodedId,
     )
 }
 
@@ -744,6 +749,51 @@ private suspend fun fetchNewsletterUnreachableUserIds(): List<String> {
 
             val body = connection.inputStream.bufferedReader().use { it.readText() }.trim()
             parseUserIdsResponse(body)
+        } finally {
+            connection.disconnect()
+        }
+    }
+}
+
+private suspend fun postEncodedUserIdsToSpreadsheet(encodedUserIds: List<String>) {
+    if (encodedUserIds.isEmpty()) {
+        return
+    }
+
+    val apiKey = BuildConfig.NEWSLETTER_SPREADSHET_API_KEY.trim()
+    if (apiKey.isEmpty()) {
+        throw IOException("newsletter.spreadshet.api.key is missing in local.properties")
+    }
+
+    val baseEndpoint = BuildConfig.NEWSLETTER_SPREADSHET_API_ENDPOINT.trim()
+    if (baseEndpoint.isEmpty()) {
+        throw IOException("newsletter.spreadshet.api.endpoint is missing in local.properties")
+    }
+    val endpoint = "${baseEndpoint.trimEnd('/')}/"
+
+    withContext(Dispatchers.IO) {
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection)
+        try {
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 15_000
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("X-API-Key", apiKey)
+
+            val payload = JSONObject().put("encoded_user_ids", JSONArray(encodedUserIds))
+            connection.outputStream.use { output ->
+                output.write(payload.toString().toByteArray(Charsets.UTF_8))
+            }
+
+            val responseCode = connection.responseCode
+            if (responseCode !in 200..299) {
+                val errorBody = connection.errorStream
+                    ?.bufferedReader()
+                    ?.use { it.readText() }
+                    .orEmpty()
+                throw IOException("HTTP $responseCode ${errorBody.take(200)}".trim())
+            }
         } finally {
             connection.disconnect()
         }

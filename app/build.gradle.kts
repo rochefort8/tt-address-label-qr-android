@@ -14,6 +14,8 @@ val localProperties = Properties().apply {
 val qrDecryptKeyHex = (localProperties.getProperty("qr.decrypt.key.hex") ?: "").trim()
 val newsletterApiKey = (localProperties.getProperty("newsletter.api.key") ?: "").trim()
 val newsletterApiEndpoint = (localProperties.getProperty("newsletter.api.endpoint") ?: "").trim()
+val newsletterSpreadsheetApiKey = (localProperties.getProperty("newsletter.spreadshet.api.key") ?: "").trim()
+val newsletterSpreadsheetApiEndpoint = (localProperties.getProperty("newsletter.spreadshet.api.endpoint") ?: "").trim()
 
 android {
     namespace = "com.ttqr.android"
@@ -28,6 +30,8 @@ android {
         buildConfigField("String", "QR_DECRYPT_KEY_HEX", "\"$qrDecryptKeyHex\"")
         buildConfigField("String", "NEWSLETTER_API_KEY", "\"$newsletterApiKey\"")
         buildConfigField("String", "NEWSLETTER_API_ENDPOINT", "\"$newsletterApiEndpoint\"")
+        buildConfigField("String", "NEWSLETTER_SPREADSHET_API_KEY", "\"$newsletterSpreadsheetApiKey\"")
+        buildConfigField("String", "NEWSLETTER_SPREADSHET_API_ENDPOINT", "\"$newsletterSpreadsheetApiEndpoint\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
