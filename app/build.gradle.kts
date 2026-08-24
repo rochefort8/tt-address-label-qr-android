@@ -16,6 +16,10 @@ val newsletterApiKey = (localProperties.getProperty("newsletter.api.key") ?: "")
 val newsletterApiEndpoint = (localProperties.getProperty("newsletter.api.endpoint") ?: "").trim()
 val newsletterSpreadsheetApiKey = (localProperties.getProperty("newsletter.spreadshet.api.key") ?: "").trim()
 val newsletterSpreadsheetApiEndpoint = (localProperties.getProperty("newsletter.spreadshet.api.endpoint") ?: "").trim()
+val appVersionName = (localProperties.getProperty("version") ?: "").trim()
+val versionMatch = Regex("^(\\d)\\.(\\d)\\.(\\d)$").matchEntire(appVersionName)
+    ?: error("local.properties の version は X.Y.Z 形式（各1桁の数字）で指定してください。")
+val appVersionCode = versionMatch.groupValues.drop(1).joinToString("").toInt()
 
 android {
     namespace = "com.ttqr.android"
@@ -25,8 +29,8 @@ android {
         applicationId = "com.ttqr.android"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
         buildConfigField("String", "QR_DECRYPT_KEY_HEX", "\"$qrDecryptKeyHex\"")
         buildConfigField("String", "NEWSLETTER_API_KEY", "\"$newsletterApiKey\"")
         buildConfigField("String", "NEWSLETTER_API_ENDPOINT", "\"$newsletterApiEndpoint\"")
