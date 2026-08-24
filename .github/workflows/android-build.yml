@@ -1,0 +1,30 @@
+name: Android Build
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Configure build version
+        run: echo "version=0.0.0" > local.properties
+
+      - name: Build and test
+        run: ./gradlew --no-daemon build
