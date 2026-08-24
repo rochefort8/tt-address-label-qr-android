@@ -23,6 +23,27 @@ val appVersionCode = versionMatch.groupValues.drop(1).joinToString("").toInt()
 require(appVersionCode > 0) {
     "local.properties の version は 0.0.0 以外を指定してください。"
 }
+val releaseKeystorePath = (System.getenv("ANDROID_KEYSTORE_PATH") ?: "").trim()
+val releaseStorePassword = (System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "").trim()
+val releaseKeyAlias = (System.getenv("ANDROID_KEY_ALIAS") ?: "").trim()
+val releaseKeyPassword = (System.getenv("ANDROID_KEY_PASSWORD") ?: "").trim()
+val releaseSigningConfigured = listOf(
+    releaseKeystorePath,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all(String::isNotBlank)
+val requestedTasks = gradle.startParameter.taskNames.map { it.substringAfterLast(':').lowercase() }
+val releaseSigningRequired = requestedTasks.any {
+    "release" in it || it in setOf("assemble", "build", "bundle")
+}
+
+if (releaseSigningRequired && !releaseSigningConfigured) {
+    error(
+        "リリースビルドには ANDROID_KEYSTORE_PATH、ANDROID_KEYSTORE_PASSWORD、" +
+            "ANDROID_KEY_ALIAS、ANDROID_KEY_PASSWORD の設定が必要です。",
+    )
+}
 
 android {
     namespace = "com.ttqr.android"
@@ -46,8 +67,22 @@ android {
         }
     }
 
+    if (releaseSigningConfigured) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseKeystorePath)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
