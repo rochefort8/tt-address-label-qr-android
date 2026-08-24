@@ -24,7 +24,7 @@ jobs:
           cache: gradle
 
       - name: Configure build version
-        run: echo "version=0.0.0" > local.properties
+        run: echo "version=0.0.1" > local.properties
 
       - name: Build and test
         run: ./gradlew --no-daemon build

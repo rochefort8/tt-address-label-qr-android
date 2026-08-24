@@ -20,6 +20,9 @@ val appVersionName = (localProperties.getProperty("version") ?: "").trim()
 val versionMatch = Regex("^(\\d)\\.(\\d)\\.(\\d)$").matchEntire(appVersionName)
     ?: error("local.properties の version は X.Y.Z 形式（各1桁の数字）で指定してください。")
 val appVersionCode = versionMatch.groupValues.drop(1).joinToString("").toInt()
+require(appVersionCode > 0) {
+    "local.properties の version は 0.0.0 以外を指定してください。"
+}
 
 android {
     namespace = "com.ttqr.android"
