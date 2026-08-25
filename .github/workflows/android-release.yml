@@ -23,20 +23,30 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - name: Configure release version
-        run: printf 'version=%s\n' "$GITHUB_REF_NAME" > local.properties
-
-      - name: Restore release keystore
+      - name: Configure release properties
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
-
-      - name: Build release APK
-        env:
-          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.keystore
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          NEWSLETTER_API_ENDPOINT: ${{ secrets.NEWSLETTER_API_ENDPOINT }}
+          NEWSLETTER_API_KEY: ${{ secrets.NEWSLETTER_API_KEY }}
+          NEWSLETTER_SPREADSHEET_API_ENDPOINT: ${{ secrets.NEWSLETTER_SPREADSHEET_API_ENDPOINT }}
+          NEWSLETTER_SPREADSHEET_API_KEY: ${{ secrets.NEWSLETTER_SPREADSHEET_API_KEY }}
+          QR_DECRYPT_KEY_HEX: ${{ secrets.QR_DECRYPT_KEY_HEX }}
+        run: |
+          printf 'version=%s\n' "$GITHUB_REF_NAME" > local.properties
+          printf 'android.keystore.base64=%s\n' "$ANDROID_KEYSTORE_BASE64" >> local.properties
+          printf 'android.keystore.password=%s\n' "$ANDROID_KEYSTORE_PASSWORD" >> local.properties
+          printf 'android.keystore.alias=%s\n' "$ANDROID_KEY_ALIAS" >> local.properties
+          printf 'android.keystore.alias.password=%s\n' "$ANDROID_KEY_PASSWORD" >> local.properties
+          printf 'newsletter.api.endpoint=%s\n' "$NEWSLETTER_API_ENDPOINT" >> local.properties
+          printf 'newsletter.api.key=%s\n' "$NEWSLETTER_API_KEY" >> local.properties
+          printf 'newsletter.spreadshet.api.endpoint=%s\n' "$NEWSLETTER_SPREADSHEET_API_ENDPOINT" >> local.properties
+          printf 'newsletter.spreadshet.api.key=%s\n' "$NEWSLETTER_SPREADSHEET_API_KEY" >> local.properties
+          printf 'qr.decrypt.key.hex=%s\n' "$QR_DECRYPT_KEY_HEX" >> local.properties
+
+      - name: Build release APK
         run: ./gradlew --no-daemon assembleRelease
 
       - name: Create GitHub Release

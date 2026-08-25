@@ -1,3 +1,4 @@
+import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -23,10 +24,27 @@ val appVersionCode = versionMatch.groupValues.drop(1).joinToString("").toInt()
 require(appVersionCode > 0) {
     "local.properties の version は 0.0.0 以外を指定してください。"
 }
-val releaseKeystorePath = (System.getenv("ANDROID_KEYSTORE_PATH") ?: "").trim()
-val releaseStorePassword = (System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "").trim()
-val releaseKeyAlias = (System.getenv("ANDROID_KEY_ALIAS") ?: "").trim()
-val releaseKeyPassword = (System.getenv("ANDROID_KEY_PASSWORD") ?: "").trim()
+fun envOrLocal(envName: String, localName: String): String =
+    ((System.getenv(envName) ?: localProperties.getProperty(localName)) ?: "").trim()
+
+val releaseKeystorePathFromConfig = envOrLocal("ANDROID_KEYSTORE_PATH", "android.keystore.path")
+val releaseKeystoreBase64 = envOrLocal("ANDROID_KEYSTORE_BASE64", "android.keystore.base64")
+val releaseStorePassword = envOrLocal("ANDROID_KEYSTORE_PASSWORD", "android.keystore.password")
+val releaseKeyAlias = envOrLocal("ANDROID_KEY_ALIAS", "android.keystore.alias")
+val releaseKeyPassword = envOrLocal("ANDROID_KEY_PASSWORD", "android.keystore.alias.password")
+val generatedReleaseKeystoreFile = rootProject.layout.buildDirectory
+    .file("generated/signing/release-keystore.jks")
+    .get()
+    .asFile
+val releaseKeystorePath = when {
+    releaseKeystorePathFromConfig.isNotBlank() -> releaseKeystorePathFromConfig
+    releaseKeystoreBase64.isNotBlank() -> {
+        generatedReleaseKeystoreFile.parentFile.mkdirs()
+        generatedReleaseKeystoreFile.writeBytes(Base64.getDecoder().decode(releaseKeystoreBase64))
+        generatedReleaseKeystoreFile.absolutePath
+    }
+    else -> ""
+}
 val releaseSigningConfigured = listOf(
     releaseKeystorePath,
     releaseStorePassword,
@@ -40,8 +58,10 @@ val releaseSigningRequired = requestedTasks.any {
 
 if (releaseSigningRequired && !releaseSigningConfigured) {
     error(
-        "リリースビルドには ANDROID_KEYSTORE_PATH、ANDROID_KEYSTORE_PASSWORD、" +
-            "ANDROID_KEY_ALIAS、ANDROID_KEY_PASSWORD の設定が必要です。",
+        "リリースビルドには ANDROID_KEYSTORE_PATH または android.keystore.path / android.keystore.base64、" +
+            "ANDROID_KEYSTORE_PASSWORD または android.keystore.password、" +
+            "ANDROID_KEY_ALIAS または android.keystore.alias、" +
+            "ANDROID_KEY_PASSWORD または android.keystore.alias.password の設定が必要です。",
     )
 }
 
